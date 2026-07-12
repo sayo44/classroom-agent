@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+# 运行时数据（含 API Key 等敏感配置）
+data/settings.json
+
+# 本地 Whisper 模型权重（75MB，运行时零联网；用 scripts/download_model.py 拉取）
+models/
+# HF 下载缓存
+.hf_cache/
+
+# 运行时日志
+server.log
+*.pid

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>课堂智能体 · 管理端</title>
+  <link rel="stylesheet" href="/static/admin/admin.css?v=5" />
+</head>
+<body>
+  <div class="layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo">🤖</span>
+        <span class="brand-name">课堂智能体</span>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" data-view="list">我的智能体</a>
+        <a class="nav-item" data-view="settings">模型设置</a>
+      </nav>
+      <div class="user">
+        <div class="avatar-default">兰</div>
+        <div class="user-meta">
+          <div class="user-name">兰老师</div>
+          <div class="user-role">管理员</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="content">
+      <!-- 列表视图 -->
+      <section class="view" id="view-list">
+        <div class="view-head">
+          <h1>我的智能体</h1>
+        </div>
+        <div class="agent-grid" id="agent-grid"></div>
+      </section>
+
+      <!-- 编辑视图 -->
+      <section class="view hidden" id="view-edit">
+        <div class="view-head">
+          <h1 id="edit-title">修改智能体</h1>
+          <div>
+            <button class="btn-ghost" id="btn-cancel">取消</button>
+            <button class="btn-primary" id="btn-save">保存</button>
+          </div>
+        </div>
+        <div class="form">
+          <input type="hidden" id="f-slug" />
+          <div class="form-row">
+            <label>头像</label>
+            <div class="avatar-row">
+              <div class="avatar-preview" id="avatar-preview">🙂</div>
+              <input type="file" id="f-avatar" accept="image/*" />
+            </div>
+          </div>
+          <div class="form-row">
+            <label>名称 *</label>
+            <input type="text" id="f-name" placeholder="如：聪聪" />
+          </div>
+          <div class="form-row">
+            <label>人设 *</label>
+            <textarea id="f-persona" rows="4" placeholder="你是谁，性格怎样，怎么说话……"></textarea>
+          </div>
+          <div class="form-row">
+            <label>工作描述</label>
+            <textarea id="f-description" rows="3" placeholder="这个智能体负责做什么"></textarea>
+          </div>
+          <div class="form-row">
+            <label>开场问候语（可选）</label>
+            <input type="text" id="f-opening" placeholder="如：你好呀，我是聪聪！" />
+          </div>
+          <div class="form-row">
+            <label>模型</label>
+            <select id="f-model"></select>
+            <p class="hint">留空则使用模型设置里的默认模型。</p>
+          </div>
+          <div class="form-row" id="knowledge-block">
+            <label>知识库（智能体可参考的背景资料，直接粘贴文本）</label>
+            <textarea id="f-knowledge-text" rows="8" placeholder="把智能体需要掌握的资料、课文原文、知识点等粘贴到这里……"></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- 调试视图 -->
+      <section class="view hidden" id="view-debug">
+        <div class="view-head">
+          <h1 id="debug-title">调试</h1>
+          <div>
+            <button class="btn-ghost" id="btn-back-list">返回</button>
+            <button class="btn-ghost" id="btn-edit-from-debug">修改</button>
+            <button class="btn-primary" id="btn-publish">发布</button>
+          </div>
+        </div>
+        <div class="debug-frame">
+          <iframe id="debug-iframe" src="about:blank"></iframe>
+        </div>
+        <div class="share-row" id="share-row" style="display:none">
+          <span class="share-label">分享链接</span>
+          <input type="text" id="debug-link" readonly />
+          <button class="btn-ghost" id="btn-copy-debug">复制</button>
+        </div>
+      </section>
+
+      <!-- 模型设置视图 -->
+      <section class="view hidden" id="view-settings">
+        <div class="view-head">
+          <div>
+            <h1>模型</h1>
+            <p class="subhead">自定义模型</p>
+          </div>
+          <button class="btn-primary" id="btn-add-model">+ 添加模型</button>
+        </div>
+        <div class="models-section">
+          <h3>已保存模型</h3>
+          <div id="models-grid" class="models-grid"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 添加/编辑模型弹窗 -->
+  <div class="modal hidden" id="model-modal">
+    <div class="modal-box wide">
+      <h3 id="model-modal-title">添加模型</h3>
+      <input type="hidden" id="m-id" />
+      <div class="form">
+        <div class="form-row">
+          <label>显示名称</label>
+          <input type="text" id="m-name" placeholder="如：DeepSeek V4.1" />
+        </div>
+        <div class="form-row">
+          <label>接口地址</label>
+          <input type="text" id="m-base_url" placeholder="https://api.example.com/v1/chat/completions" />
+        </div>
+        <div class="form-row">
+          <label>API Key</label>
+          <div class="password-row">
+            <input type="password" id="m-api_key" placeholder="输入你的 API Key" autocomplete="off" />
+            <button type="button" class="btn-ghost" id="btn-toggle-m-key">显示</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>模型名称</label>
+          <input type="text" id="m-model_id" placeholder="输入模型参数值，例如 gpt-4o 或 openai/gpt-4o" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="btn-cancel-model">取消</button>
+        <button class="btn-primary" id="btn-save-model">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发布弹窗 -->
+  <div class="modal hidden" id="publish-modal">
+    <div class="modal-box">
+      <h3>发布成功 🎉</h3>
+      <p>学生/家长打开这个链接即可对话：</p>
+      <div class="link-row">
+        <input type="text" id="publish-link" readonly />
+        <button class="btn-primary" id="btn-copy">复制</button>
+      </div>
+      <button class="btn-ghost" id="btn-close-modal">关闭</button>
+    </div>
+  </div>
+
+  <script src="/static/admin/admin.js?v=5"></script>
+</body>
+</html>

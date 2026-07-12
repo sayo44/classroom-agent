@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>课堂智能体</title>
+  <link rel="stylesheet" href="/static/chat/chat.css?v=5" />
+</head>
+<body>
+  <div class="chat">
+    <header class="navbar">
+      <span class="title"><span id="agent-name">智能体</span> <span class="tag">AI 智能体</span></span>
+      <span class="tts-toggle" id="tts-toggle" title="语音播报开关">🔊</span>
+    </header>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="inputbar">
+      <div class="plus">➕</div>
+      <div class="field">
+        <input type="text" id="input" placeholder="说点什么…" />
+      </div>
+      <div class="emoji">😊</div>
+      <div class="mic" id="mic">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect x="9" y="3" width="6" height="11" rx="3" fill="#6B99EC"/>
+          <path d="M6 11a6 6 0 0 0 12 0" stroke="#6B99EC" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <line x1="12" y1="17" x2="12" y2="21" stroke="#6B99EC" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="send" id="send">➤</div>
+    </div>
+  </div>
+
+  <script src="/static/chat/chat.js?v=7"></script>
+</body>
+</html>
