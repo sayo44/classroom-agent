@@ -88,4 +88,5 @@ def api_update_settings(body: SettingsUpdate):
 
     updated = {"default_model": default_model, "models": new_models}
     save_settings(updated)
-    return _mask(updated)
+    # 返回合并了本地密钥的结果（含真 key，但已掩码），保证 UI 仍显示 ********
+    return _mask(get_settings())

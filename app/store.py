@@ -15,8 +15,10 @@ from app.config import AGENTS_DIR, DATA_DIR
 from app.knowledge import get_knowledge_text
 
 
-# 全局系统设置文件（模型/API Key 等）
+# 全局系统设置文件（模型/API Key 等）。此文件进 GitHub，api_key 始终为空。
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
+# 本地密钥文件（不提交）。结构与 settings.json 一致，api_key 为真实值，优先于 settings.json。
+SETTINGS_LOCAL_PATH = os.path.join(DATA_DIR, "settings.local.json")
 
 DEFAULT_SETTINGS = {
     "default_model": "deepseek-v4-pro",
@@ -78,28 +80,76 @@ def ensure_settings():
             json.dump(DEFAULT_SETTINGS, f, ensure_ascii=False, indent=2)
 
 
+def _load_local() -> dict:
+    """读取本地密钥文件（不提交）。不存在或损坏时返回空结构。"""
+    if os.path.isfile(SETTINGS_LOCAL_PATH):
+        try:
+            with open(SETTINGS_LOCAL_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"models": []}
+
+
+def _save_local(local: dict):
+    with open(SETTINGS_LOCAL_PATH, "w", encoding="utf-8") as f:
+        json.dump(local, f, ensure_ascii=False, indent=2)
+
+
 def get_settings() -> dict:
-    """读取系统设置；不存在则初始化默认值；自动迁移旧格式。"""
+    """读取系统设置；不存在则初始化默认值；自动迁移旧格式；并合并本地密钥。"""
     ensure_settings()
     with open(SETTINGS_PATH, encoding="utf-8") as f:
         raw = json.load(f)
     # 新格式判断：models[0] 应含 base_url/model_id
     models = raw.get("models", [])
-    if models and isinstance(models[0], dict) and ("base_url" in models[0] or "model_id" in models[0]):
-        return raw
-    migrated = _migrate_old_settings(raw)
-    # 把迁移结果落盘，避免每次读取都重复迁移，也保证 UI 拿到的是新格式
-    try:
-        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-            json.dump(migrated, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-    return migrated
+    if not (models and isinstance(models[0], dict) and ("base_url" in models[0] or "model_id" in models[0])):
+        raw = _migrate_old_settings(raw)
+        # 把迁移结果落盘，避免每次读取都重复迁移，也保证 UI 拿到的是新格式
+        try:
+            with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+    # 合并本地密钥文件（settings.local.json，不提交），local 优先
+    local = _load_local()
+    if local.get("models"):
+        local_by_id = {(m.get("id") or m.get("model_id")): m for m in local["models"]}
+        for m in raw.get("models", []):
+            mid = m.get("id") or m.get("model_id")
+            lm = local_by_id.get(mid)
+            if lm and lm.get("api_key"):
+                m["api_key"] = lm["api_key"]
+    return raw
 
 
 def save_settings(settings: dict) -> dict:
-    """保存系统设置。"""
+    """保存系统设置。
+
+    真实 api_key 只写入 settings.local.json（不提交）；settings.json 里 api_key 始终留空，
+    保证提交到 GitHub 的代码不含密钥。
+    """
     ensure_settings()
+    local = _load_local()
+    local_models = {(m.get("id") or m.get("model_id")): m for m in local.get("models", [])}
+    for m in settings.get("models", []):
+        mid = m.get("id") or m.get("model_id") or ""
+        key = m.get("api_key", "")
+        if mid in local_models:
+            local_models[mid]["api_key"] = key
+        else:
+            local_models[mid] = {
+                "id": mid,
+                "name": m.get("name", ""),
+                "base_url": m.get("base_url", ""),
+                "api_key": key,
+                "model_id": m.get("model_id", mid),
+            }
+        m["api_key"] = ""  # 进 GitHub 的 settings.json 不存真实密钥
+    local["models"] = [local_models[k] for k in local_models]
+    if not local.get("default_model"):
+        local["default_model"] = settings.get("default_model", "")
+    _save_local(local)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(settings, f, ensure_ascii=False, indent=2)
     return settings
