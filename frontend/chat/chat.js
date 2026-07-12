@@ -6,6 +6,7 @@ const slug = location.pathname.split("/c/")[1] || "";
 let history = []; // [{role, content}]
 let ttsOn = true;
 let listening = false;
+let currentAudio = null; // 当前正在播放的 Edge TTS 音频，用于随时停止
 
 async function init() {
   const res = await fetch("/api/agents/" + slug);
@@ -35,6 +36,8 @@ function addMsg(side, text) {
 }
 
 async function send() {
+  stopSpeaking(); // 发新消息时先停掉上一轮可能还在播放的语音
+  let hadError = false;
   const input = $("#input");
   const text = input.value.trim();
   if (!text) return;
@@ -65,6 +68,7 @@ async function send() {
         try {
           const d = JSON.parse(line.slice(6));
           full += d.content;
+          if (d.error) hadError = true;
           bubble.textContent = full;
           $("#messages").scrollTop = $("#messages").scrollHeight;
         } catch (e) {}
@@ -72,7 +76,16 @@ async function send() {
     });
   }
   history.push({ role: "assistant", content: full });
-  if (ttsOn) speak(full);
+  if (ttsOn && !hadError) speak(full);
+}
+
+// 立即停止当前正在播放的语音（Edge TTS 的 Audio 或浏览器原生 speechSynthesis）
+function stopSpeaking() {
+  if (currentAudio) {
+    try { currentAudio.pause(); } catch (e) {}
+    currentAudio = null;
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
 // 语音播报：优先后端 Edge TTS，失败回退浏览器 speechSynthesis
@@ -88,8 +101,20 @@ async function speak(text) {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+      currentAudio = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) currentAudio = null;
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (currentAudio === audio) currentAudio = null;
+      };
+      try {
+        await audio.play();
+      } catch (e) {
+        currentAudio = null;
+      }
       return;
     }
   } catch (e) {
@@ -215,6 +240,7 @@ $("#send").onclick = send;
 $("#input").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
 $("#tts-toggle").onclick = () => {
   ttsOn = !ttsOn;
+  if (!ttsOn) stopSpeaking(); // 关闭播报时立即停止当前正在播放的语音
   $("#tts-toggle").classList.toggle("off", !ttsOn);
   $("#tts-toggle").textContent = ttsOn ? "🔊" : "🔇";
 };

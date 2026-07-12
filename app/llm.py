@@ -128,7 +128,7 @@ def chat_sync(agent: dict, messages: list) -> str:
 def chat_stream(agent: dict, messages: list):
     model_id, config = _resolve_model(agent)
     if not _api_key_configured(config):
-        yield "（未配置 API Key，请先在模型设置或 .env 中填写模型密钥后重试～）"
+        yield {"content": "（未配置 API Key，请先在模型设置或 .env 中填写模型密钥后重试～）", "error": True}
         return
     try:
         client = get_client_for_config(config)
@@ -140,7 +140,7 @@ def chat_stream(agent: dict, messages: list):
                 continue
             delta = chunk.choices[0].delta.content
             if delta:
-                yield _to_simplified(delta)
+                yield {"content": _to_simplified(delta)}
     except Exception as e:
         logger.exception("LLM chat_stream failed")
-        yield _friendly_error(e)
+        yield {"content": _friendly_error(e), "error": True}

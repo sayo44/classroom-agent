@@ -105,6 +105,6 @@ def api_chat(slug: str, body: ChatRequest):
     if body.stream:
         def gen():
             for piece in chat_stream(a, body.messages):
-                yield f"data: {json.dumps({'content': piece}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(piece, ensure_ascii=False)}\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream; charset=utf-8")
     return {"reply": chat_sync(a, body.messages)}
