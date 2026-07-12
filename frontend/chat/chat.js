@@ -16,7 +16,19 @@ async function init() {
   }
   const a = await res.json();
   $("#agent-name").textContent = a.name;
-  if (a.opening) addMsg("left", a.opening);
+  if (a.opening) {
+    addMsg("left", a.opening);
+    // 问候语播报：浏览器自动播放策略可能拦截首屏语音，
+    // 先尝试立即播放，失败则等首次用户交互（点击/按键）后再播
+    if (ttsOn) {
+      const ok = await speak(a.opening);
+      if (!ok) {
+        const onFirst = () => { speak(a.opening); };
+        document.addEventListener("click", onFirst, { once: true });
+        document.addEventListener("keydown", onFirst, { once: true });
+      }
+    }
+  }
 }
 
 function addMsg(side, text) {
@@ -88,9 +100,9 @@ function stopSpeaking() {
   if ("speechSynthesis" in window) speechSynthesis.cancel();
 }
 
-// 语音播报：优先后端 Edge TTS，失败回退浏览器 speechSynthesis
+// 语音播报：优先后端 Edge TTS，失败回退浏览器 speechSynthesis。返回是否成功触发播放
 async function speak(text) {
-  if (!text) return;
+  if (!text) return false;
   try {
     const res = await fetch("/api/tts", {
       method: "POST",
@@ -112,21 +124,30 @@ async function speak(text) {
       };
       try {
         await audio.play();
+        return true;
       } catch (e) {
         currentAudio = null;
       }
-      return;
     }
   } catch (e) {
     // 后端不可用，走兜底
   }
   // 兜底：浏览器原生语音
-  if (!("speechSynthesis" in window)) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "zh-CN";
-  u.rate = 1;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
+  return speakFallback(text);
+}
+
+function speakFallback(text) {
+  if (!("speechSynthesis" in window)) return false;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN";
+    u.rate = 1;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 // 把 16kHz 单声道 Float32 采样编码为 WAV（后端 soundfile 直接读取，无需 ffmpeg）
