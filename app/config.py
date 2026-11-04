@@ -1,11 +1,18 @@
 """读取 .env 配置。所有配置集中在 .env，不写死在代码里。"""
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# 仓库根目录（classroom-agent/）
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 仓库根目录（classroom-agent/）。
+# 打包后（PyInstaller 冻结模式）Python 模块被收进 PYZ 归档，__file__ 是虚拟路径，
+# 两层 dirname 解析出的目录里并没有 frontend/models/data；这些资源被打进 sys._MEIPASS，
+# 必须以它为准，否则前端/静态挂载在启动时就会因目录不存在而崩溃。
+if getattr(sys, "frozen", False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 可写数据目录：桌面客户端打包后资源在 sys._MEIPASS 内（只读），launcher 会把用户目录写到
 # APP_DATA_DIR（存 .env、agents、settings.local.json 等运行时数据）；开发模式不设该变量，默认用仓库 data/。
 DATA_DIR = os.getenv("APP_DATA_DIR", os.path.join(BASE_DIR, "data"))

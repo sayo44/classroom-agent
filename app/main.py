@@ -35,6 +35,15 @@ def chat_page(slug: str):
 
 
 # 静态资源托管
+# 先确保目录存在，避免空目录（如 assets/）在打包后未生成、或路径解析偏差导致 StaticFiles 启动即崩溃
+for _d in (
+    os.path.join(FRONTEND_DIR, "admin"),
+    os.path.join(FRONTEND_DIR, "chat"),
+    ASSETS_DIR,
+    DATA_DIR,
+):
+    os.makedirs(_d, exist_ok=True)
+
 app.mount("/static/admin", StaticFiles(directory=os.path.join(FRONTEND_DIR, "admin")), name="admin_static")
 app.mount("/static/chat", StaticFiles(directory=os.path.join(FRONTEND_DIR, "chat")), name="chat_static")
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")

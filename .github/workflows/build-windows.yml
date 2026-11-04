@@ -49,18 +49,29 @@ jobs:
           PYTHONUTF8: "1"   # 同上：exe 内嵌 Python 打印中文也需 utf-8
         run: |
           $env:NO_GUI = "1"
-          $proc = Start-Process -FilePath "dist/ClassroomAgent/ClassroomAgent.exe" -PassThru
+          $out = "smoke_stdout.log"
+          $err = "smoke_stderr.log"
+          # 重定向 exe 的 stdout/stderr，console=False 也能抓到 Python 报错（否则真因被吞）
+          $proc = Start-Process -FilePath "dist/ClassroomAgent/ClassroomAgent.exe" -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
           $ok = $false
-          for ($i = 0; $i -lt 30; $i++) {
+          for ($i = 0; $i -lt 45; $i++) {
             Start-Sleep -Seconds 2
             try {
-              $r1 = Invoke-WebRequest -Uri "http://127.0.0.1:8000/c/congcong" -UseBasicParsing -ErrorAction SilentlyContinue
-              $r2 = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -ErrorAction SilentlyContinue
-              if ($r1.StatusCode -eq 200 -and $r2.StatusCode -eq 200) { $ok = $true; break }
+              # find_free_port 可能选 8000-8029，逐个试
+              for ($p = 8000; $p -le 8029; $p++) {
+                $r1 = Invoke-WebRequest -Uri "http://127.0.0.1:$p/c/congcong" -UseBasicParsing -ErrorAction SilentlyContinue
+                $r2 = Invoke-WebRequest -Uri "http://127.0.0.1:$p/" -UseBasicParsing -ErrorAction SilentlyContinue
+                if ($r1.StatusCode -eq 200 -and $r2.StatusCode -eq 200) { $ok = $true; break }
+              }
             } catch {}
+            if ($ok) { break }
           }
           if (-not $ok) {
-            Write-Error "冒烟测试失败：后端未正常启动"
+            Write-Host "===== EXE STDOUT ====="
+            Get-Content $out -ErrorAction SilentlyContinue
+            Write-Host "===== EXE STDERR ====="
+            Get-Content $err -ErrorAction SilentlyContinue
+            Write-Error "冒烟测试失败：后端未正常启动（详见上方 EXE 输出）"
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
             exit 1
           }
