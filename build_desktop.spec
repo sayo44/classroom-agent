@@ -67,6 +67,7 @@ hiddenimports = [
 # 按平台补充 pywebview 平台模块（这些是通过字符串动态 import 的，PyInstaller 可能漏收集）
 if sys.platform == "win32":
     hiddenimports += [
+        "webview.menu",
         "webview.platforms.edgechrome",
         "webview.platforms.winforms",
         "webview.platforms.mshtml",

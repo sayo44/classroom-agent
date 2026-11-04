@@ -147,6 +147,34 @@ class JsApi:
         open_chat()
 
 
+def build_menu():
+    """兼容 pywebview 4.x 与 5.x 的菜单 API。
+
+    4.x：webview.MenuAction / webview.MenuSeparator 在顶层，start(menu=[...]) 直接传列表。
+    5.x：这些移到 webview.menu 子模块，且顶层菜单必须用 Menu(title, items=[...]) 包裹。
+    取不到菜单 API 时返回 None，调用方降级为无菜单启动（管理端仍可经页面按钮切换）。
+    """
+    try:
+        from webview.menu import Menu, MenuAction, MenuSeparator
+        return Menu("课堂智能体", [
+            MenuAction("打开老师管理端", open_admin),
+            MenuSeparator(),
+            MenuAction("返回学生聊天", open_chat),
+        ])
+    except (ImportError, AttributeError):
+        pass
+    try:
+        MenuAction = webview.MenuAction
+        MenuSeparator = webview.MenuSeparator
+        return [
+            MenuAction("打开老师管理端", open_admin),
+            MenuSeparator(),
+            MenuAction("返回学生聊天", open_chat),
+        ]
+    except AttributeError:
+        return None
+
+
 def main():
     global PORT, main_window
 
@@ -178,11 +206,7 @@ def main():
             pass
         return
 
-    menu = [
-        webview.MenuAction("打开老师管理端", open_admin),
-        webview.MenuSeparator(),
-        webview.MenuAction("返回学生聊天", open_chat),
-    ]
+    menu = build_menu()
     main_window = webview.create_window(
         title="课堂智能体",
         url=f"http://127.0.0.1:{PORT}/c/congcong",
@@ -193,7 +217,10 @@ def main():
         confirm_close=True,
     )
     try:
-        webview.start(menu=menu)
+        if menu is not None:
+            webview.start(menu=menu)
+        else:
+            webview.start()
     except TypeError:
         # 旧版 pywebview 不支持 menu 参数时回退
         webview.start()
