@@ -6,7 +6,9 @@ load_dotenv()
 
 # 仓库根目录（classroom-agent/）
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# 可写数据目录：桌面客户端打包后资源在 sys._MEIPASS 内（只读），launcher 会把用户目录写到
+# APP_DATA_DIR（存 .env、agents、settings.local.json 等运行时数据）；开发模式不设该变量，默认用仓库 data/。
+DATA_DIR = os.getenv("APP_DATA_DIR", os.path.join(BASE_DIR, "data"))
 AGENTS_DIR = os.path.join(DATA_DIR, "agents")
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
