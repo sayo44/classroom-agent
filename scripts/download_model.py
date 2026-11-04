@@ -16,6 +16,13 @@ import shutil
 import sys
 import argparse
 
+# 强制 stdout/stderr 使用 utf-8，避免 Windows（非 utf-8 locale，如 cp1252）打印中文时报 UnicodeEncodeError
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(BASE_DIR, ".hf_cache")
 

@@ -16,6 +16,14 @@ import time
 import shutil
 import webview
 
+# 强制 stdout/stderr 用 utf-8，避免 Windows（非 utf-8 locale，如 cp1252）打印中文时报 UnicodeEncodeError
+# 对打包后的 exe 与本地 Windows 用户同样有效
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 FROZEN = getattr(sys, "frozen", False)
 
 
