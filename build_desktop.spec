@@ -14,7 +14,12 @@
 import os
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# PyInstaller 通过 exec() 执行本 spec，命名空间里没有 __file__，用 PyInstaller 提供的 SPECPATH（spec 所在目录）。
+# 保留 __file__ 兜底，以便本地以其他非 PyInstaller 方式加载时也能用。
+try:
+    HERE = SPECPATH
+except NameError:
+    HERE = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "课堂智能体"
 EXE_NAME = "ClassroomAgent"  # 英文产物名，避开 Windows 路径与 CI 中文编码问题
 
@@ -35,12 +40,19 @@ def collect_data_datas(base):
     return out
 
 
-datas = [
-    (os.path.join(HERE, "frontend"), "frontend"),
-    (os.path.join(HERE, "assets"), "assets"),
-    (os.path.join(HERE, "models"), "models"),
-    (os.path.join(HERE, ".env.example"), ".env.example"),
-] + collect_data_datas(HERE)
+def add_data(out, src_rel, dst):
+    """仅当源路径存在才加入 datas，避免空目录/缺失目录导致 PyInstaller 报错。"""
+    src = os.path.join(HERE, src_rel)
+    if os.path.exists(src):
+        out.append((src, dst))
+    return out
+
+datas = []
+datas = add_data(datas, "frontend", "frontend")
+datas = add_data(datas, "assets", "assets")
+datas = add_data(datas, "models", "models")
+datas = add_data(datas, ".env.example", ".env.example")
+datas += collect_data_datas(HERE)
 
 hiddenimports = [
     "app", "app.main", "app.config", "app.store", "app.llm", "app.asr", "app.tts",
