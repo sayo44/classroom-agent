@@ -55,8 +55,23 @@ USER_DATA = resolve_user_data()
 PORT = None  # 运行时确定
 
 
+def _safe_copy(src, dst):
+    """健壮复制：纯二进制读-写，绕开 Windows 上 shutil.copy2/CopyFile2 对只读或隐藏源文件
+    （如 .env.example）的权限怪癖。失败仅告警，不抛异常（复制模板不是启动的硬性前提）。"""
+    try:
+        with open(src, "rb") as f:
+            data = f.read()
+        with open(dst, "wb") as f:
+            f.write(data)
+        return True
+    except OSError as e:
+        print(f"[WARN] 复制失败 {src} -> {dst}: {e}", file=sys.stderr)
+        return False
+
+
 def init_user_data():
-    """首次运行：把包内 data 模板（排除密钥文件）与 .env.example 复制到用户目录。"""
+    """首次运行：把包内 data 模板（排除密钥文件）与 .env.example 复制到用户目录。
+    任何复制失败都只告警、不致命，保证后端一定能启动。"""
     # data 模板（排除含真实密钥的 settings.local.json）
     src_data = resource_path("data")
     dst_data = os.path.join(USER_DATA, "data")
@@ -69,17 +84,25 @@ def init_user_data():
             d = os.path.join(dst_data, name)
             if os.path.isdir(s):
                 if not os.path.exists(d):
-                    shutil.copytree(s, d)
+                    try:
+                        shutil.copytree(s, d)
+                    except OSError as e:
+                        print(f"[WARN] copytree 失败 {s}: {e}", file=sys.stderr)
             elif not os.path.exists(d):
-                shutil.copy2(s, d)
-    # .env（首次从 .env.example 复制；若不存在则创建空文件，用户自行填 LLM_API_KEY）
+                _safe_copy(s, d)
+    # .env（首次从 .env.example 复制；若复制或源缺失则创建空文件，用户自行填 LLM_API_KEY）
     env_path = os.path.join(USER_DATA, ".env")
     if not os.path.exists(env_path):
         example = resource_path(".env.example")
+        print(f"[DEBUG] USER_DATA={USER_DATA} example={example} exists={os.path.exists(example)}", file=sys.stderr)
+        created = False
         if os.path.exists(example):
-            shutil.copy2(example, env_path)
-        else:
-            open(env_path, "w", encoding="utf-8").close()
+            created = _safe_copy(example, env_path)
+        if not created:
+            try:
+                open(env_path, "w", encoding="utf-8").close()
+            except OSError as e:
+                print(f"[WARN] 创建空 .env 失败（后端将以默认配置启动）: {e}", file=sys.stderr)
     # 切到用户目录，使 config.load_dotenv() 读到 USER_DATA/.env
     os.chdir(USER_DATA)
 
@@ -127,8 +150,10 @@ class JsApi:
 def main():
     global PORT, main_window
 
-    # 桌面模式下把运行时数据目录交给 config
-    if FROZEN:
+    # 桌面模式下把运行时数据目录交给 config。
+    # 仅当用户目录 data 已就绪（init_user_data 复制成功）才切换；否则 config 回退到
+    # 包内 _MEIPASS/data（只读但完整），保证后端即使复制失败也能正常启动。
+    if FROZEN and os.path.isdir(os.path.join(USER_DATA, "data")):
         os.environ["APP_DATA_DIR"] = USER_DATA
 
     init_user_data()

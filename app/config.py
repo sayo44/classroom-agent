@@ -15,7 +15,12 @@ else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 可写数据目录：桌面客户端打包后资源在 sys._MEIPASS 内（只读），launcher 会把用户目录写到
 # APP_DATA_DIR（存 .env、agents、settings.local.json 等运行时数据）；开发模式不设该变量，默认用仓库 data/。
-DATA_DIR = os.getenv("APP_DATA_DIR", os.path.join(BASE_DIR, "data"))
+# 若用户目录 data 尚未就绪（首次复制失败等），回退到包内内置 data（只读但完整），保证后端可启动。
+_USER_DATA = os.getenv("APP_DATA_DIR")
+if _USER_DATA and os.path.isdir(os.path.join(_USER_DATA, "data")):
+    DATA_DIR = os.path.join(_USER_DATA, "data")
+else:
+    DATA_DIR = os.path.join(BASE_DIR, "data")
 AGENTS_DIR = os.path.join(DATA_DIR, "agents")
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
