@@ -104,14 +104,27 @@ classroom-agent/
 
 ---
 
-## Windows 本地部署（自带 Python，免安装）
+## Windows 部署
 
-不想在每台电脑装 Python？本仓库附带一键脚本，把**嵌入式 Python 与全部依赖装进项目 `lib\` 目录**，用 `lib\python\python.exe` 直接运行，不写系统 PATH、不装系统 Python。UI 即系统浏览器，**不需要 WebView2**。
+两种形态都**不依赖用户 PC 安装 Python**，UI 即系统浏览器，**不需要 WebView2**。
+
+### A. 离线便携包（含 lib，推荐分发给客户）
+
+CI 已把**嵌入式 Python + 全部依赖 + 语音模型**全部预装进项目 `lib\`，打包发布在 GitHub Release。客户拿到后：
+
+1. 从 GitHub Release 下载 `classroom-agent-windows-portable.zip`，解压到任意目录
+2. 双击 `install_windows.bat`：`lib\python` 已就绪，**自动跳过下载安装**，只生成 `.env`
+3. 双击 `start_web_windows.bat`：起 FastAPI 服务并**自动打开浏览器**聊天页；控制台常驻，报错直接可见
+4. 浏览器访问：聊天页 `http://localhost:8000/c/congcong`、管理端 `http://localhost:8000/`
+
+> 全程**零联网**。改 `.env` 填 `LLM_API_KEY` 即可使用。
+
+### B. 源码自装（开发者 / agent 自动部署）
 
 1. 把本仓库（或压缩包）放到任意目录
 2. 双击 `install_windows.bat`：首次自动下载嵌入式 Python 3.11 到 `lib\python` 并安装依赖（**首次需联网**，之后离线可用），并生成 `.env`
-3. 双击 `start_web_windows.bat`：起 FastAPI 服务后**自动用默认浏览器打开**学生聊天页；控制台保持打开，任何报错都会直接打印
-4. 浏览器访问：聊天页 `http://localhost:8000/c/congcong`、管理端 `http://localhost:8000/`
+3. 双击 `start_web_windows.bat`：起服务 + 自动开浏览器；控制台常驻
+4. 浏览器访问同上
 
 > 语音模型 `models/` 不进仓库，首次运行若缺失，执行 `lib\python\python.exe scripts\download_model.py` 拉取（离线可用）。
 

@@ -55,31 +55,39 @@ if (-not (Ensure-LibPython)) {
 }
 
 $libPip = Join-Path $root "lib\python\Scripts\pip.exe"
+$sitePkgs = Join-Path $root "lib\python\Lib\site-packages"
+$depsReady = Test-Path (Join-Path $sitePkgs "fastapi")
 
-# 2) Bootstrap pip into lib\python if missing
-if (-not (Test-Path $libPip)) {
-    Write-Host "[!] Bootstrapping pip into lib\python ..." -ForegroundColor Yellow
-    $getpip = Join-Path $env:TEMP "get-pip.py"
-    try {
-        Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getpip -ErrorAction Stop
-        & $libPy $getpip --no-warn-script-location
-        Remove-Item $getpip -ErrorAction SilentlyContinue
-    } catch {
-        Write-Host "[X] pip bootstrap failed: $($_.Exception.Message)" -ForegroundColor Red
-        Read-Host "Press Enter to exit"
-        exit 1
+if ($depsReady) {
+    # 离线便携包：依赖已由 CI 预装进 lib\python，跳过下载与安装，纯本地部署
+    Write-Host "[OK] Dependencies already bundled in lib\python, skip download/install (offline package)." -ForegroundColor Green
+} else {
+    # 2) Bootstrap pip into lib\python if missing
+    if (-not (Test-Path $libPip)) {
+        Write-Host "[!] Bootstrapping pip into lib\python ..." -ForegroundColor Yellow
+        $getpip = Join-Path $env:TEMP "get-pip.py"
+        try {
+            Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getpip -ErrorAction Stop
+            & $libPy $getpip --no-warn-script-location
+            Remove-Item $getpip -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "[X] pip bootstrap failed: $($_.Exception.Message)" -ForegroundColor Red
+            Read-Host "Press Enter to exit"
+            exit 1
+        }
+    }
+
+    # 3) Install dependencies into lib\python\Lib\site-packages (first run downloads a lot)
+    Write-Host "[2/4] Installing dependencies into lib\python (first run is large, please wait)..." -ForegroundColor Green
+    # Windows: opencc 原生包装不上，改用纯 Python 重实现 opencc-python-reimplemented
+    $reqWin = Join-Path $env:TEMP "requirements_win.txt"
+    (Get-Content requirements.txt) -replace '^opencc$', 'opencc-python-reimplemented' | Set-Content $reqWin
+    & $libPip install -r $reqWin -i https://pypi.tuna.tsinghua.edu.cn/simple --no-warn-script-location
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Mirror failed, retry without mirror..." -ForegroundColor Yellow
+        & $libPip install -r $reqWin --no-warn-script-location
     }
 }
-
-# 3) Install dependencies into lib\python\Lib\site-packages (first run downloads a lot)
-Write-Host "[2/4] Installing dependencies into lib\python (first run is large, please wait)..." -ForegroundColor Green
-& $libPip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --no-warn-script-location
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Mirror failed, retry without mirror..." -ForegroundColor Yellow
-    & $libPip install -r requirements.txt --no-warn-script-location
-}
-# optional: traditional -> simplified Chinese (non-fatal if it fails)
-& $libPip install opencc-python-reimplemented --no-warn-script-location 2>$null
 
 # 4) .env
 if (-not (Test-Path ".env")) {
@@ -90,10 +98,12 @@ if (-not (Test-Path ".env")) {
     Write-Host "[3/4] .env exists, skip" -ForegroundColor Green
 }
 
-# warn if local STT model is missing
-if (-not (Test-Path "models\faster-whisper-base")) {
-    Write-Host "[!] Local STT model models\faster-whisper-base not found; voice input disabled." -ForegroundColor Yellow
-    Write-Host "    Run: lib\python\python.exe scripts\download_model.py" -ForegroundColor Yellow
+# warn if no local STT model is present
+$modelDir = Join-Path $root "models"
+$models = @(Get-ChildItem $modelDir -Filter "faster-whisper-*" -Directory -ErrorAction SilentlyContinue)
+if ($models.Count -eq 0) {
+    Write-Host "[!] No local STT model found under models\; voice input disabled." -ForegroundColor Yellow
+    Write-Host "    Run: lib\python\python.exe scripts\download_model.py --size base" -ForegroundColor Yellow
 }
 
 Write-Host "[4/4] Environment ready." -ForegroundColor Green

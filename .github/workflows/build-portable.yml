@@ -1,0 +1,137 @@
+name: Build Portable Windows Package
+
+# 出一份「含 lib\ 的离线部署包」：嵌入式 Python + 全部依赖 + 语音模型全部预装进项目 lib\，
+# 客户下载解压后双击 .bat 即可部署，零联网。
+# 触发：
+#   - workflow_dispatch（手动，可选模型尺寸，仅上传 artifact 供测试）
+#   - push tag v*（构建 + 上传 artifact + 发 GitHub Release，给客户用）
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_size:
+        description: 'Bundled faster-whisper model size (tiny/base/small)'
+        required: false
+        default: 'base'
+        type: choice
+        options:
+          - tiny
+          - base
+          - small
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-portable:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup embedded Python into lib\python
+        shell: pwsh
+        run: |
+          $pyVer = "3.11.9"
+          $embedZip = "python-$pyVer-embed-amd64.zip"
+          $embedUrl = "https://www.python.org/ftp/python/$pyVer/$embedZip"
+          $dest = "${{ github.workspace }}\lib\python"
+          $tmp = "$env:TEMP\$embedZip"
+          Write-Host "Downloading embedded Python $pyVer ..."
+          Invoke-WebRequest -Uri $embedUrl -OutFile $tmp
+          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+          Expand-Archive -Path $tmp -DestinationPath $dest -Force
+          Remove-Item $tmp
+          # Embedded Python disables 'import site' by default, which blocks pip-installed packages. Re-enable it.
+          $pth = Get-ChildItem $dest -Filter "python3*._pth" | Select-Object -First 1
+          if ($pth) {
+            $txt = Get-Content $pth.FullName
+            $txt = $txt -replace '#import site', 'import site'
+            if (-not ($txt -match 'Lib\\site-packages')) { $txt += "`nLib\site-packages" }
+            Set-Content $pth.FullName $txt -Encoding ASCII
+          }
+          & "$dest\python.exe" --version
+
+      - name: Bootstrap pip
+        shell: pwsh
+        run: |
+          $libPy = "${{ github.workspace }}\lib\python\python.exe"
+          $libPip = "${{ github.workspace }}\lib\python\Scripts\pip.exe"
+          if (-not (Test-Path $libPip)) {
+            $getpip = "$env:TEMP\get-pip.py"
+            Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getpip
+            & $libPy $getpip --no-warn-script-location
+            Remove-Item $getpip
+          }
+          & $libPip --version
+
+      - name: Install dependencies into lib\python
+        shell: pwsh
+        run: |
+          $libPip = "${{ github.workspace }}\lib\python\Scripts\pip.exe"
+          $reqWin = "$env:TEMP\requirements_win.txt"
+          # Windows: opencc needs the pure-python reimplementation (opencc-python-reimplemented)
+          (Get-Content "${{ github.workspace }}\requirements.txt") -replace '^opencc$', 'opencc-python-reimplemented' | Set-Content $reqWin
+          & $libPip install -r $reqWin --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "First attempt failed, retry without mirror..."
+            & $libPip install -r $reqWin --no-warn-script-location
+          }
+
+      - name: Pre-download STT model (offline-ready)
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          $libPy = "${{ github.workspace }}\lib\python\python.exe"
+          $size = "${{ github.event.inputs.model_size }}"
+          if (-not $size) { $size = "base" }
+          $env:HF_ENDPOINT = "https://hf-mirror.com"
+          & $libPy "${{ github.workspace }}\scripts\download_model.py" --size $size
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Mirror failed, retry with official endpoint..."
+            $env:HF_ENDPOINT = "https://huggingface.co"
+            & $libPy "${{ github.workspace }}\scripts\download_model.py" --size $size
+          }
+
+      - name: Clean dev/CI-only and sensitive files
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
+          Remove-Item "$root\.git" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "$root\.github" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "$root\.hf_cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "$root\venv" -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem "$root" -Recurse -Include __pycache__ | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem "$root" -Recurse -Include *.pyc | Remove-Item -Force -ErrorAction SilentlyContinue
+          Remove-Item "$root\data\settings.local.json" -Force -ErrorAction SilentlyContinue
+          Remove-Item "$root\*.log" -Force -ErrorAction SilentlyContinue
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $root = "${{ github.workspace }}"
+          $out = Join-Path $env:TEMP "classroom-agent-windows-portable.zip"
+          if (Test-Path $out) { Remove-Item $out -Force }
+          Compress-Archive -Path "$root\*" -DestinationPath $out -Force
+          $mb = [math]::Round((Get-Item $out).Length / 1MB, 1)
+          Write-Host "Package: $out ($mb MB)"
+          # upload-artifact requires the path inside the workspace; move it in.
+          $dist = Join-Path $root "_dist"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Move-Item $out (Join-Path $dist "classroom-agent-windows-portable.zip") -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: classroom-agent-windows-portable
+          path: ${{ github.workspace }}/_dist/classroom-agent-windows-portable.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ github.workspace }}/_dist/classroom-agent-windows-portable.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
