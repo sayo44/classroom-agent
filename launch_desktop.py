@@ -213,10 +213,21 @@ def main():
     # 等后端起来
     time.sleep(2.5)
 
-    # 无界面模式（CI 冒烟测试 / 纯服务端部署）：只起后端，不创建原生窗口
+    # 无界面模式（CI 冒烟测试 / web 版本地部署）：只起后端，不创建原生窗口
     if os.getenv("NO_GUI"):
+        chat_url = f"http://127.0.0.1:{PORT}/c/congcong"
+        admin_url = f"http://127.0.0.1:{PORT}/"
         log.info("NO_GUI 模式，仅起后端，不创建窗口")
-        print(f"[NO_GUI] 后端已启动：http://127.0.0.1:{PORT}/c/congcong")
+        print(f"[NO_GUI] 后端已启动：{chat_url}")
+        print(f"[NO_GUI] 管理端：{admin_url}")
+        # web 版本地部署：起好后自动用默认浏览器打开学生聊天页（动态端口也能正确打开）
+        if os.getenv("OPEN_BROWSER"):
+            import webbrowser
+            try:
+                webbrowser.open(chat_url)
+                print(f"[NO_GUI] 已尝试在浏览器打开：{chat_url}")
+            except Exception as e:
+                print(f"[NO_GUI] 自动打开浏览器失败（请手动访问 {chat_url}）：{e}")
         try:
             while True:
                 time.sleep(1)
