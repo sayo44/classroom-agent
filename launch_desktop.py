@@ -54,6 +54,18 @@ def resolve_user_data():
 USER_DATA = resolve_user_data()
 PORT = None  # 运行时确定
 
+import logging
+# 启动诊断日志：console=False 会吞掉所有 stdout/stderr，真机双击无反应时无法排查。
+# 这里把关键步骤与未捕获异常写文件，双击无窗口时直接看本文件即可定位。
+LAUNCH_LOG = os.path.join(USER_DATA, "launch.log")
+logging.basicConfig(
+    filename=LAUNCH_LOG,
+    level=logging.INFO,
+    encoding="utf-8",
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger("launch")
+
 
 def _safe_copy(src, dst):
     """健壮复制：纯二进制读-写，绕开 Windows 上 shutil.copy2/CopyFile2 对只读或隐藏源文件
@@ -177,6 +189,7 @@ def build_menu():
 
 def main():
     global PORT, main_window
+    log.info("进入 main()，FROZEN=%s", FROZEN)
 
     # 桌面模式下把运行时数据目录交给 config。
     # 仅当用户目录 data 已就绪（init_user_data 复制成功）才切换；否则 config 回退到
@@ -185,19 +198,24 @@ def main():
         os.environ["APP_DATA_DIR"] = USER_DATA
 
     init_user_data()
+    log.info("init_user_data 完成")
 
     PORT = find_free_port(8000)
     if PORT is None:
+        log.error("启动失败：8000-8029 端口均被占用")
         print("启动失败：8000-8029 端口均被占用，请关闭占用程序后重试。")
         return
+    log.info("选定端口 %s", PORT)
 
     server_thread = threading.Thread(target=run_server, args=(PORT,), daemon=True)
     server_thread.start()
+    log.info("后端线程已启动，等待 2.5s 让 uvicorn 起来")
     # 等后端起来
     time.sleep(2.5)
 
     # 无界面模式（CI 冒烟测试 / 纯服务端部署）：只起后端，不创建原生窗口
     if os.getenv("NO_GUI"):
+        log.info("NO_GUI 模式，仅起后端，不创建窗口")
         print(f"[NO_GUI] 后端已启动：http://127.0.0.1:{PORT}/c/congcong")
         try:
             while True:
@@ -207,6 +225,7 @@ def main():
         return
 
     menu = build_menu()
+    log.info("创建 pywebview 窗口，URL=http://127.0.0.1:%s/c/congcong", PORT)
     main_window = webview.create_window(
         title="课堂智能体",
         url=f"http://127.0.0.1:{PORT}/c/congcong",
@@ -217,14 +236,31 @@ def main():
         confirm_close=True,
     )
     try:
+        log.info("调用 webview.start()（menu=%s）", "有" if menu is not None else "无")
         if menu is not None:
             webview.start(menu=menu)
         else:
             webview.start()
     except TypeError:
         # 旧版 pywebview 不支持 menu 参数时回退
+        log.warning("webview.start(menu=...) 不支持，回退无菜单")
         webview.start()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        log.error("未捕获异常导致启动失败：\n%s", traceback.format_exc())
+        # 真机双击无反应时，弹窗提示并指向日志，避免用户完全看不到原因
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                f"课堂智能体启动失败，详见日志：\n{LAUNCH_LOG}",
+                "启动失败",
+                0x10,
+            )
+        except Exception:
+            pass
