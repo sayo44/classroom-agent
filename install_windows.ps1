@@ -1,122 +1,102 @@
-# Classroom Agent - Windows one-click install & deploy
-# Launched by install_windows.bat
+# Classroom Agent - Windows portable install (no system Python required)
+# Downloads an embedded Python into lib\python and installs all deps there.
+# The app then runs with lib\python\python.exe, fully self-contained per project.
+# (No system Python, no venv, nothing written to the system PATH.)
 $ErrorActionPreference = 'Continue'
 $root = $PSScriptRoot
 Set-Location $root
 
 Write-Host ""
-Write-Host "===== Classroom Agent Install (Windows) =====" -ForegroundColor Cyan
+Write-Host "===== Classroom Agent Install (Windows, portable) =====" -ForegroundColor Cyan
 Write-Host ""
 
-# 1) Detect Python >= 3.10
-function Find-Python {
-    $cands = @('py', 'python', 'python3')
-    foreach ($c in $cands) {
+$pyVer  = "3.11.9"
+$embedZip = "python-$pyVer-embed-amd64.zip"
+$embedUrl = "https://www.python.org/ftp/python/$pyVer/$embedZip"
+$libPy  = Join-Path $root "lib\python\python.exe"
+
+# 1) Prepare embedded Python under lib\python (download once, reuse afterwards)
+function Ensure-LibPython {
+    if (Test-Path $script:libPy) {
         try {
-            $out = & $c --version 2>&1
-            if ($out -match 'Python (\d+)\.(\d+)') {
-                return @{cmd=$c; maj=[int]$matches[1]; min=[int]$matches[2]; ver=$out}
-            }
+            $v = & $script:libPy --version 2>&1
+            Write-Host "[OK] lib\python exists: $v" -ForegroundColor Green
+            return $true
         } catch {}
     }
-    return $null
-}
-
-# 自动下载并静默安装 Python（用户级，自动加入 PATH），无需手动安装
-function Install-Python {
-    # 锁版本：3.11 系列对 PyInstaller / faster-whisper 兼容性最稳
-    $ver = "3.11.9"
-    $url = "https://www.python.org/ftp/python/$ver/python-$ver-amd64.exe"
-    $installer = Join-Path $env:TEMP "python-$ver-amd64.exe"
-    Write-Host "[!] Python not found. Auto-downloading & installing Python $ver ..." -ForegroundColor Yellow
+    Write-Host "[!] Downloading embedded Python $pyVer into lib\python ..." -ForegroundColor Yellow
+    $tmp = Join-Path $env:TEMP $embedZip
     try {
-        Invoke-WebRequest -Uri $url -OutFile $installer -ErrorAction Stop
+        Invoke-WebRequest -Uri $embedUrl -OutFile $tmp -ErrorAction Stop
     } catch {
         Write-Host "[X] Download failed: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "    Install Python 3.10+ manually: https://www.python.org/downloads/" -ForegroundColor Yellow
-        Read-Host "Press Enter to exit"
-        exit 1
+        return $false
     }
-    Write-Host "[!] Installing Python silently (user-level, added to PATH)..." -ForegroundColor Yellow
-    # /quiet 静默；PrependPath=1 加入当前用户 PATH；Include_pip=1 确保 pip
-    Start-Process -FilePath $installer -ArgumentList "/quiet", "PrependPath=1", "Include_pip=1" -Wait
-    Remove-Item $installer -ErrorAction SilentlyContinue
-    # 安装程序改写了用户 PATH 注册表，但当前进程需手动重读才能找到 python
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-    Write-Host "[OK] Python installed." -ForegroundColor Green
+    $dest = Join-Path $root "lib\python"
+    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+    Expand-Archive -Path $tmp -DestinationPath $dest -Force
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    # Embedded Python disables 'import site' by default, which blocks any pip-installed
+    # package from loading. Re-enable it and make sure Lib\site-packages is on the path.
+    $pth = Get-ChildItem $dest -Filter "python3*._pth" | Select-Object -First 1
+    if ($pth) {
+        $txt = Get-Content $pth.FullName
+        $txt = $txt -replace '#import site', 'import site'
+        if (-not ($txt -match 'Lib\\site-packages')) { $txt += "`nLib\site-packages" }
+        Set-Content $pth.FullName $txt -Encoding ASCII
+    }
+    Write-Host "[OK] Embedded Python ready at lib\python" -ForegroundColor Green
+    return $true
 }
 
-$py = Find-Python
-if (-not $py) {
-    Install-Python
-    $py = Find-Python
-    if (-not $py) {
-        Write-Host "[X] Python auto-install failed. Install 3.10+ manually: https://www.python.org/downloads/" -ForegroundColor Red
-        Read-Host "Press Enter to exit"
-        exit 1
-    }
-}
-if ($py.maj -lt 3 -or ($py.maj -eq 3 -and $py.min -lt 10)) {
-    Write-Host "[X] Python too old: $($py.ver). Need 3.10 or newer. Please upgrade manually." -ForegroundColor Red
+if (-not (Ensure-LibPython)) {
     Read-Host "Press Enter to exit"
     exit 1
 }
-Write-Host "[1/5] Python: $($py.ver)" -ForegroundColor Green
 
-# 2) Virtual environment
-$venvPy = Join-Path $root "venv\Scripts\python.exe"
-$venvPip = Join-Path $root "venv\Scripts\pip.exe"
-if (-not (Test-Path $venvPy)) {
-    Write-Host "[2/5] Creating venv ..." -ForegroundColor Green
-    & $py.cmd -m venv venv
-} else {
-    Write-Host "[2/5] venv exists, skip" -ForegroundColor Green
+$libPip = Join-Path $root "lib\python\Scripts\pip.exe"
+
+# 2) Bootstrap pip into lib\python if missing
+if (-not (Test-Path $libPip)) {
+    Write-Host "[!] Bootstrapping pip into lib\python ..." -ForegroundColor Yellow
+    $getpip = Join-Path $env:TEMP "get-pip.py"
+    try {
+        Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getpip -ErrorAction Stop
+        & $libPy $getpip --no-warn-script-location
+        Remove-Item $getpip -ErrorAction SilentlyContinue
+    } catch {
+        Write-Host "[X] pip bootstrap failed: $($_.Exception.Message)" -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
 }
 
-# 3) Install dependencies (Tsinghua mirror for CN; remove -i for other regions)
-Write-Host "[3/5] Installing dependencies (first run is large, please wait)..." -ForegroundColor Green
-& $venvPip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 3) Install dependencies into lib\python\Lib\site-packages (first run downloads a lot)
+Write-Host "[2/4] Installing dependencies into lib\python (first run is large, please wait)..." -ForegroundColor Green
+& $libPip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --no-warn-script-location
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Mirror failed, retry without mirror..." -ForegroundColor Yellow
-    & $venvPip install -r requirements.txt
+    & $libPip install -r requirements.txt --no-warn-script-location
 }
 # optional: traditional -> simplified Chinese (non-fatal if it fails)
-& $venvPip install opencc-python-reimplemented 2>$null
+& $libPip install opencc-python-reimplemented --no-warn-script-location 2>$null
 
 # 4) .env
 if (-not (Test-Path ".env")) {
     if (Test-Path ".env.example") { Copy-Item ".env.example" ".env" }
-    Write-Host "[4/5] Created .env from .env.example" -ForegroundColor Green
+    Write-Host "[3/4] Created .env from .env.example" -ForegroundColor Green
     Write-Host "      [!] Edit .env and set LLM_API_KEY, or chat will not work." -ForegroundColor Yellow
 } else {
-    Write-Host "[4/5] .env exists, skip" -ForegroundColor Green
+    Write-Host "[3/4] .env exists, skip" -ForegroundColor Green
 }
 
 # warn if local STT model is missing
 if (-not (Test-Path "models\faster-whisper-base")) {
     Write-Host "[!] Local STT model models\faster-whisper-base not found; voice input disabled." -ForegroundColor Yellow
-    Write-Host "    Run: venv\Scripts\python.exe scripts\download_model.py" -ForegroundColor Yellow
+    Write-Host "    Run: lib\python\python.exe scripts\download_model.py" -ForegroundColor Yellow
 }
 
-# 5) Start service
-Write-Host "[5/5] Starting service..." -ForegroundColor Green
-try {
-    $conns = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }
-    foreach ($c in $conns) { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }
-} catch {}
-
-Start-Process -FilePath $venvPy -ArgumentList "run.py" -RedirectStandardOutput "server.log" -RedirectStandardError "server.log" -WindowStyle Hidden
-
-Start-Sleep -Seconds 5
-try {
-    $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 6
-    if ($r.StatusCode -eq 200) { Write-Host "[OK] Server is up." -ForegroundColor Green }
-} catch {
-    Write-Host "[!] Server may not be ready yet, check server.log" -ForegroundColor Yellow
-}
-
-Write-Host ""
-Write-Host "Admin:  http://127.0.0.1:8000/" -ForegroundColor Cyan
-Write-Host "Chat:   http://127.0.0.1:8000/c/congcong" -ForegroundColor Cyan
-Start-Process "http://127.0.0.1:8000/c/congcong"
-Read-Host "Press Enter to close this window (server keeps running in background)"
+Write-Host "[4/4] Environment ready." -ForegroundColor Green
+Write-Host "Next: double-click start_windows.bat to launch (console stays open so you can see errors)." -ForegroundColor Cyan
+Write-Host "Admin:  http://127.0.0.1:8000/    Chat: http://127.0.0.1:8000/c/congcong" -ForegroundColor Cyan
+Read-Host "Press Enter to close this window"

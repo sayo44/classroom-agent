@@ -14,3 +14,6 @@ models/
 # 运行时日志
 server.log
 *.pid
+
+# 便携 Windows 运行时（嵌入式 Python + 依赖，由 install_windows.ps1 在用户端生成，不入库）
+lib/

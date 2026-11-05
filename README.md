@@ -104,6 +104,20 @@ classroom-agent/
 
 ---
 
+## Windows 便携桌面版（自带 Python，免安装）
+
+不想在每台电脑装 Python？本仓库附带一键脚本，把**嵌入式 Python 与全部依赖装进项目 `lib\` 目录**，用 `lib\python\python.exe` 直接运行，不写系统 PATH、不装系统 Python。
+
+1. 把本仓库（或压缩包）放到任意目录
+2. 双击 `install_windows.bat`：首次自动下载嵌入式 Python 3.11 到 `lib\python` 并安装依赖（**首次需联网**，之后离线可用），并生成 `.env`
+3. 双击 `start_windows.bat`：前台启动，弹出课堂智能体桌面窗口；**控制台保持打开**，任何报错都会直接打印，便于排查
+4. 浏览器访问：管理端 `http://localhost:8000/`、聊天页 `http://localhost:8000/c/congcong`
+
+> 注意：pywebview 在 Windows 依赖系统自带的 **Microsoft Edge WebView2 Runtime**。若双击无窗口，先确认系统已装 WebView2（设置 → 应用 搜 WebView2；缺失则从微软官网装 Evergreen 版）。
+> 语音模型 `models/` 不进仓库，首次运行若缺失，执行 `lib\python\python.exe scripts\download_model.py` 拉取（离线可用）。
+
+---
+
 ## 常见问题
 
 - **对话没反应**：检查 `.env` 里的 `LLM_API_KEY` 是否正确，以及 `LLM_BASE_URL` 是否可达。
