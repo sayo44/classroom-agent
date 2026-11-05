@@ -97,8 +97,7 @@ if (-not (Test-Path "models\faster-whisper-base")) {
 }
 
 Write-Host "[4/4] Environment ready." -ForegroundColor Green
-Write-Host "Launch options (both use lib\python, no system Python needed):" -ForegroundColor Cyan
-Write-Host "  - Web version (browser):     double-click start_web_windows.bat  (auto-opens browser)" -ForegroundColor Cyan
-Write-Host "  - Desktop window version:    double-click start_desktop_windows.bat" -ForegroundColor Cyan
+Write-Host "Launch: double-click start_web_windows.bat (uses lib\python, no system Python needed)." -ForegroundColor Cyan
+Write-Host "It starts the server and auto-opens your browser. Console stays open so you can see errors." -ForegroundColor Cyan
 Write-Host "Chat:  http://127.0.0.1:8000/c/congcong    Admin: http://127.0.0.1:8000/" -ForegroundColor Cyan
 Read-Host "Press Enter to close this window"

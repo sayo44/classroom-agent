@@ -6,11 +6,10 @@ if not exist "lib\python\python.exe" (
     pause
     exit /b 1
 )
-set NO_GUI=1
 set OPEN_BROWSER=1
 echo Using portable Python: lib\python\python.exe
 echo Server will start, browser opens automatically.
 echo If errors appear below, they show the real cause - screenshot and send to dev.
 echo.
-lib\python\python.exe launch_desktop.py
+lib\python\python.exe run_app.py
 pause

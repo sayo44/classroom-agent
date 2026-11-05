@@ -104,21 +104,15 @@ classroom-agent/
 
 ---
 
-## Windows 便携版（自带 Python，免安装）
+## Windows 本地部署（自带 Python，免安装）
 
-不想在每台电脑装 Python？本仓库附带一键脚本，把**嵌入式 Python 与全部依赖装进项目 `lib\` 目录**，用 `lib\python\python.exe` 直接运行，不写系统 PATH、不装系统 Python。两条启动路线任选：
+不想在每台电脑装 Python？本仓库附带一键脚本，把**嵌入式 Python 与全部依赖装进项目 `lib\` 目录**，用 `lib\python\python.exe` 直接运行，不写系统 PATH、不装系统 Python。UI 即系统浏览器，**不需要 WebView2**。
 
-**A. Web 版本地部署（浏览器访问，推荐排查问题用）**
 1. 把本仓库（或压缩包）放到任意目录
 2. 双击 `install_windows.bat`：首次自动下载嵌入式 Python 3.11 到 `lib\python` 并安装依赖（**首次需联网**，之后离线可用），并生成 `.env`
 3. 双击 `start_web_windows.bat`：起 FastAPI 服务后**自动用默认浏览器打开**学生聊天页；控制台保持打开，任何报错都会直接打印
 4. 浏览器访问：聊天页 `http://localhost:8000/c/congcong`、管理端 `http://localhost:8000/`
 
-**B. 桌面窗口版（pywebview 原生窗口）**
-1. 同上完成 `install_windows.bat`
-2. 双击 `start_desktop_windows.bat`：弹出课堂智能体桌面窗口；控制台保持打开，便于排查
-
-> 注意：pywebview 在 Windows 依赖系统自带的 **Microsoft Edge WebView2 Runtime**（仅桌面窗口版 B 需要；Web 版 A 用系统浏览器，不需要 WebView2）。若桌面版双击无窗口，先确认系统已装 WebView2（设置 → 应用 搜 WebView2；缺失则从微软官网装 Evergreen 版）。
 > 语音模型 `models/` 不进仓库，首次运行若缺失，执行 `lib\python\python.exe scripts\download_model.py` 拉取（离线可用）。
 
 ---

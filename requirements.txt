@@ -8,5 +8,3 @@ edge-tts
 faster-whisper
 # 简繁转换（STT 后转简体），语音链路需要
 opencc
-# 桌面客户端原生窗口壳（pywebview）：把本地后端包进原生窗口，免浏览器
-pywebview
