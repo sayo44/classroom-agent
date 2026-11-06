@@ -125,8 +125,8 @@ jobs:
         with:
           name: classroom-agent-windows-portable
           path: ${{ github.workspace }}
-          exclude: |
-            _dist/**
+          exclude:
+            - _dist/**
           if-no-files-found: error
 
       - name: Publish GitHub Release
