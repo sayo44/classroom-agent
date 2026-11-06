@@ -120,11 +120,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dist | Out-Null
           Move-Item $out (Join-Path $dist "classroom-agent-windows-portable.zip") -Force
 
-      - name: Upload artifact
+      - name: Upload artifact (single-layer: project root, exclude inner _dist zip)
         uses: actions/upload-artifact@v4
         with:
           name: classroom-agent-windows-portable
-          path: ${{ github.workspace }}/_dist/classroom-agent-windows-portable.zip
+          path: ${{ github.workspace }}
+          exclude: |
+            _dist/**
           if-no-files-found: error
 
       - name: Publish GitHub Release
